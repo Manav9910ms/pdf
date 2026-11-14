@@ -15,7 +15,9 @@
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "jszip": "^3.10.1",
+    "pdfstudio": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
