@@ -1,12 +1,9 @@
 import type { NextConfig } from "next";
+import webpack from "webpack";
 
 const nextConfig: NextConfig = {
   webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "node:fs/promises": false,
-      "node:module": false,
-    };
+    config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:/ }));
     return config;
   },
 };
