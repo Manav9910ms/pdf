@@ -133,17 +133,21 @@ export default function Home() {
   }
 
   async function compressPdf() {
-    const [{ getDocument }, sourceFile] = await Promise.all([
+    const [pdfjs, sourceFile] = await Promise.all([
       import("pdfjs-dist/legacy/build/pdf.mjs"),
       files[0].file.arrayBuffer()
     ]);
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs",
+      import.meta.url
+    ).toString();
     const presets = {
       high: { scale: 1.8, jpeg: 0.88 },
       medium: { scale: 1.35, jpeg: 0.72 },
       strong: { scale: 1.0, jpeg: 0.55 }
     } as const;
     const preset = presets[quality as keyof typeof presets];
-    const loadingTask = getDocument({ data: new Uint8Array(sourceFile), disableWorker: true });
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(sourceFile) });
     const pdf = await loadingTask.promise;
     const output = await PDFDocument.create();
     for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
