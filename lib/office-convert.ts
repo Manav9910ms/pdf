@@ -25,7 +25,7 @@ async function wordToPdf(file: File) {
   const pdf = await PDFDocument.create();
   const host = makeHiddenHost("900px");
   try {
-    await renderAsync(await file.arrayBuffer(), host, host, { className: "docx", inWrapper: true, breakPages: true, paginate: true, ignoreLastRenderedPageBreak: false });
+    await renderAsync(await file.arrayBuffer(), host, host, { className: "docx", inWrapper: true, breakPages: true, ignoreLastRenderedPageBreak: false });
     await document.fonts.ready;
     const pages = Array.from(host.querySelectorAll<HTMLElement>(".docx"));
     if (!pages.length) throw new Error("No Word pages were found. Try saving the document again as .docx.");
