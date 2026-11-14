@@ -5,8 +5,8 @@ const root = join(process.cwd(), "node_modules", "pdfstudio", "dist");
 const patches = [
   {
     path: join(root, "runner.js"),
-    from: 'import("node" + ":fs/promises")',
-    to: 'import(/* webpackIgnore: true */ ("node" + ":fs/promises"))',
+    from: "import('node' + ':fs/promises')",
+    to: "import(/* webpackIgnore: true */ ('node' + ':fs/promises'))",
   },
   {
     path: join(root, "wasm", "qpdf.js"),
