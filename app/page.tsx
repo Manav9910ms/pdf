@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images } from "lucide-react";
 import JSZip from "jszip";
+import { convertOfficeToPdf } from "@/lib/office-convert";
 
-type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock";
+type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel";
 type PickedFile = { file: File; id: string };
 
 const tools = [
@@ -18,6 +19,9 @@ const tools = [
   { id: "pdf-images" as const, title: "PDF to Images", detail: "Export pages as PNG or JPG", icon: Images },
   { id: "protect" as const, title: "Protect PDF", detail: "Encrypt with a password", icon: Lock },
   { id: "unlock" as const, title: "Unlock PDF", detail: "Remove a password you know", icon: Unlock },
+  { id: "word" as const, title: "Word to PDF", detail: "Convert DOCX documents", icon: FileText },
+  { id: "powerpoint" as const, title: "PowerPoint to PDF", detail: "Convert PPTX slides", icon: Files },
+  { id: "excel" as const, title: "Excel to PDF", detail: "Convert XLSX workbooks", icon: FileArchive },
 ];
 
 function formatSize(bytes: number) {
@@ -59,16 +63,20 @@ export default function Home() {
   const acceptsMultiple = tool === "merge" || tool === "images";
   const isImageTool = tool === "images";
   const isPdfToImages = tool === "pdf-images";
+  const isOfficeTool = tool === "word" || tool === "powerpoint" || tool === "excel";
   const currentTool = tools.find((item) => item.id === tool)!;
   const totalSize = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
 
   function addFiles(list: FileList | null) {
     if (!list) return;
     const selected = Array.from(list);
+    const officeExt = tool === "word" ? ".docx" : tool === "powerpoint" ? ".pptx" : ".xlsx";
     const valid = isImageTool
       ? selected.filter((file) => file.type.startsWith("image/"))
-      : selected.filter((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
-    if (!valid.length) { setError(isImageTool ? "Choose supported image files." : "Please choose a PDF file."); return; }
+      : isOfficeTool
+        ? selected.filter((file) => file.name.toLowerCase().endsWith(officeExt))
+        : selected.filter((file) => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+    if (!valid.length) { setError(isImageTool ? "Choose supported image files." : isOfficeTool ? "Choose a " + officeExt + " file." : "Please choose a PDF file."); return; }
     setError("");
     setDownloadUrl("");
     setFiles((old) => {
@@ -257,6 +265,12 @@ export default function Home() {
     if (tool === "merge" && files.length < 2) { setError("Add at least two PDFs to merge."); return; }
     setBusy(true); setError(""); setDownloadUrl("");
     try {
+      if (isOfficeTool) {
+        const result = await convertOfficeToPdf(files[0].file, tool);
+        const name = tool === "word" ? "ms-word-to-pdf.pdf" : tool === "powerpoint" ? "ms-powerpoint-to-pdf.pdf" : "ms-excel-to-pdf.pdf";
+        saveResult(result, name);
+        return;
+      }
       if (tool === "images") { await imagesToPdf(); return; }
       if (tool === "compress") { await compressPdf(); return; }
       if (tool === "watermark") { await addWatermark(); return; }
@@ -293,7 +307,7 @@ export default function Home() {
     setTool(next); setFiles([]); setError(""); setDownloadUrl("");
   }
 
-  const actionLabel = tool === "merge" ? "Merge PDFs" : tool === "split" ? "Extract pages" : tool === "rotate" ? "Rotate PDF" : tool === "images" ? "Convert to PDF" : tool === "compress" ? "Compress PDF" : tool === "watermark" ? "Add watermark" : tool === "pdf-images" ? "Convert to images" : tool === "protect" ? "Protect PDF" : "Unlock PDF";
+  const actionLabel = tool === "merge" ? "Merge PDFs" : tool === "split" ? "Extract pages" : tool === "rotate" ? "Rotate PDF" : tool === "images" ? "Convert to PDF" : tool === "compress" ? "Compress PDF" : tool === "watermark" ? "Add watermark" : tool === "pdf-images" ? "Convert to images" : tool === "protect" ? "Protect PDF" : tool === "unlock" ? "Unlock PDF" : tool === "word" ? "Convert Word to PDF" : tool === "powerpoint" ? "Convert PowerPoint to PDF" : "Convert Excel to PDF";
 
   return (
     <main className="shell">
@@ -323,11 +337,13 @@ export default function Home() {
           </div>
 
           <label className="dropzone">
-            <input type="file" accept={isImageTool ? "image/*" : "application/pdf,.pdf"} multiple={acceptsMultiple} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ""; }} />
+            <input type="file" accept={isImageTool ? "image/*" : tool === "word" ? ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" : tool === "powerpoint" ? ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" : tool === "excel" ? ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf,.pdf"} multiple={acceptsMultiple} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ""; }} />
             <span className="upload-icon"><Upload size={22} /></span>
-            <strong>{files.length ? "Add more files" : isImageTool ? "Choose images" : "Choose PDF files"}</strong>
-            <span>or drop them here · {isImageTool ? "Images supported by your browser" : "PDF only"}</span>
+            <strong>{files.length ? "Add more files" : isImageTool ? "Choose images" : isOfficeTool ? "Choose " + (tool === "word" ? "Word (.docx)" : tool === "powerpoint" ? "PowerPoint (.pptx)" : "Excel (.xlsx)") + " file" : "Choose PDF files"}</strong>
+            <span>or drop them here · {isImageTool ? "Images supported by your browser" : isOfficeTool ? "Office file · processed locally" : "PDF only"}</span>
           </label>
+
+          {isOfficeTool && <p className="local-note">Office files are rendered into PDF pages. Some advanced fonts, charts, or layouts may look different from Microsoft Office, and page text may not be selectable.</p>}
 
           {files.length > 0 && <div className="file-list">
             <div className="list-heading"><span>YOUR FILES <b>{files.length}</b></span><span>{formatSize(totalSize)} total</span></div>
