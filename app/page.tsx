@@ -38,7 +38,10 @@ export default function Home() {
     if (!pdfs.length) { setError("Please choose a PDF file."); return; }
     setError("");
     setDownloadUrl("");
-    setFiles((old) => [...old, ...pdfs].map((file, index) => ({ file, id: `${file.name}-${file.lastModified}-${index}` })));
+    setFiles((old) => {
+      const next = tool === "merge" ? [...old.map((item) => item.file), ...pdfs] : [pdfs[0]];
+      return next.map((file, index) => ({ file, id: `${file.name}-${file.lastModified}-${index}` }));
+    });
   }
 
   function removeFile(id: string) {
