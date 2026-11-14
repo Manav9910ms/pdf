@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
-import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp } from "lucide-react";
+import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images } from "lucide-react";
+import JSZip from "jszip";
 
-type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark";
+type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock";
 type PickedFile = { file: File; id: string };
 
 const tools = [
@@ -14,6 +15,9 @@ const tools = [
   { id: "images" as const, title: "Images to PDF", detail: "Turn images into a PDF", icon: ImageIcon },
   { id: "compress" as const, title: "Compress PDF", detail: "Reduce PDF file size", icon: FileArchive },
   { id: "watermark" as const, title: "Watermark PDF", detail: "Add text to every page", icon: Stamp },
+  { id: "pdf-images" as const, title: "PDF to Images", detail: "Export pages as PNG or JPG", icon: Images },
+  { id: "protect" as const, title: "Protect PDF", detail: "Encrypt with a password", icon: Lock },
+  { id: "unlock" as const, title: "Unlock PDF", detail: "Remove a password you know", icon: Unlock },
 ];
 
 function formatSize(bytes: number) {
@@ -42,6 +46,10 @@ export default function Home() {
   const [watermarkSize, setWatermarkSize] = useState(44);
   const [watermarkAngle, setWatermarkAngle] = useState(-35);
   const [position, setPosition] = useState("center");
+  const [imageFormat, setImageFormat] = useState("png");
+  const [imageScale, setImageScale] = useState("1.5");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [downloadUrl, setDownloadUrl] = useState("");
@@ -50,6 +58,7 @@ export default function Home() {
 
   const acceptsMultiple = tool === "merge" || tool === "images";
   const isImageTool = tool === "images";
+  const isPdfToImages = tool === "pdf-images";
   const currentTool = tools.find((item) => item.id === tool)!;
   const totalSize = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
 
@@ -85,6 +94,12 @@ export default function Home() {
 
   function saveResult(bytes: Uint8Array, name: string) {
     const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+    setDownloadUrl(URL.createObjectURL(blob));
+    setDownloadName(name);
+    setResultSize(blob.size);
+  }
+
+  function saveBlob(blob: Blob, name: string) {
     setDownloadUrl(URL.createObjectURL(blob));
     setDownloadName(name);
     setResultSize(blob.size);
@@ -171,6 +186,52 @@ export default function Home() {
     saveResult(await output.save(), "ms-pdf-compressed.pdf");
   }
 
+  async function pdfToImages() {
+    const [pdfjs, sourceFile] = await Promise.all([import("pdfjs-dist/legacy/build/pdf.mjs"), files[0].file.arrayBuffer()]);
+    pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(sourceFile) }).promise;
+    const zip = new JSZip();
+    const extension = imageFormat === "jpeg" ? "jpg" : "png";
+    const mime = imageFormat === "jpeg" ? "image/jpeg" : "image/png";
+    const scale = Number(imageScale);
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Your browser could not create an image canvas.");
+      await page.render({ canvasContext: context, viewport, canvas } as Parameters<typeof page.render>[0]).promise;
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("Image export failed.")), mime, 0.92));
+      zip.file("page-" + String(pageNumber).padStart(3, "0") + "." + extension, blob);
+      canvas.width = 1; canvas.height = 1; page.cleanup();
+    }
+    await pdf.destroy();
+    const archive = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+    saveBlob(archive, "ms-pdf-images.zip");
+  }
+
+  async function protectPdf() {
+    if (password.length < 6) throw new Error("Use a password with at least 6 characters.");
+    if (password !== confirmPassword) throw new Error("The passwords do not match.");
+    const { createPdfToolkit } = await import("pdfstudio");
+    const toolkit = await createPdfToolkit();
+    const encrypted = await toolkit.lock(new Uint8Array(await files[0].file.arrayBuffer()), { userPassword: password, ownerPassword: password, keyLength: 256 });
+    saveResult(encrypted, "ms-pdf-protected.pdf"); setPassword(""); setConfirmPassword("");
+  }
+
+  async function unlockPdf() {
+    if (!password) throw new Error("Enter the PDF current password.");
+    const { createPdfToolkit, PdfPasswordError } = await import("pdfstudio");
+    const toolkit = await createPdfToolkit();
+    try {
+      const unlocked = await toolkit.unlock(new Uint8Array(await files[0].file.arrayBuffer()), { password });
+      saveResult(unlocked, "ms-pdf-unlocked.pdf"); setPassword("");
+    } catch (cause) {
+      if (cause instanceof PdfPasswordError) throw new Error("Incorrect password. Check it and try again.");
+      throw cause;
+    }
+  }
   async function addWatermark() {
     if (!watermark.trim()) throw new Error("Enter watermark text.");
     const pdf = await PDFDocument.load(await files[0].file.arrayBuffer());
@@ -199,6 +260,9 @@ export default function Home() {
       if (tool === "images") { await imagesToPdf(); return; }
       if (tool === "compress") { await compressPdf(); return; }
       if (tool === "watermark") { await addWatermark(); return; }
+      if (tool === "pdf-images") { await pdfToImages(); return; }
+      if (tool === "protect") { await protectPdf(); return; }
+      if (tool === "unlock") { await unlockPdf(); return; }
       const output = await PDFDocument.create();
       if (tool === "merge") {
         for (const item of files) {
@@ -229,7 +293,7 @@ export default function Home() {
     setTool(next); setFiles([]); setError(""); setDownloadUrl("");
   }
 
-  const actionLabel = tool === "merge" ? "Merge PDFs" : tool === "split" ? "Extract pages" : tool === "rotate" ? "Rotate PDF" : tool === "images" ? "Convert to PDF" : tool === "compress" ? "Compress PDF" : "Add watermark";
+  const actionLabel = tool === "merge" ? "Merge PDFs" : tool === "split" ? "Extract pages" : tool === "rotate" ? "Rotate PDF" : tool === "images" ? "Convert to PDF" : tool === "compress" ? "Compress PDF" : tool === "watermark" ? "Add watermark" : tool === "pdf-images" ? "Convert to images" : tool === "protect" ? "Protect PDF" : "Unlock PDF";
 
   return (
     <main className="shell">
@@ -278,6 +342,8 @@ export default function Home() {
           {tool === "split" && files.length > 0 && <div className="options"><label htmlFor="pages">Pages to extract</label><input id="pages" value={pages} onChange={(event) => setPages(event.target.value)} placeholder="e.g. 1, 3-5, 8" /><small>Enter page numbers or ranges, separated by commas.</small></div>}
           {tool === "rotate" && files.length > 0 && <div className="options"><label>Rotate pages</label><div className="angle-options">{[90, 180, 270].map((value) => <button key={value} className={angle === value ? "angle active" : "angle"} onClick={() => setAngle(value)}>{value}°</button>)}</div></div>}
           {tool === "compress" && files.length > 0 && <div className="options"><label htmlFor="quality">Compression level</label><select id="quality" value={quality} onChange={(event) => setQuality(event.target.value)}><option value="high">High quality · larger file</option><option value="medium">Balanced · recommended</option><option value="strong">Smaller file · lower quality</option></select><small>Pages are converted to images. Text won't remain selectable or searchable.</small></div>}
+          {tool === "pdf-images" && files.length > 0 && <div className="options"><label htmlFor="image-format">Image format</label><select id="image-format" value={imageFormat} onChange={(event) => setImageFormat(event.target.value)}><option value="png">PNG · lossless</option><option value="jpeg">JPG / JPEG · smaller files</option></select><label htmlFor="image-scale">Image resolution</label><select id="image-scale" value={imageScale} onChange={(event) => setImageScale(event.target.value)}><option value="1">Standard</option><option value="1.5">High · recommended</option><option value="2">Very high</option></select><small>All pages will be exported into a ZIP file. Higher resolution uses more memory.</small></div>}
+          {(tool === "protect" || tool === "unlock") && files.length > 0 && <div className="options"><label htmlFor="pdf-password">{tool === "protect" ? "New password" : "Current PDF password"}</label><input id="pdf-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={tool === "protect" ? "At least 6 characters" : "Enter PDF password"} />{tool === "protect" && <><label htmlFor="confirm-password">Confirm password</label><input id="confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Re-enter password" /><small>Uses AES-256 encryption. Keep this password safe; MS PDF cannot recover it.</small></>}</div>}
           {tool === "watermark" && files.length > 0 && <div className="options">
             <label htmlFor="watermark">Watermark text</label><input id="watermark" value={watermark} onChange={(event) => setWatermark(event.target.value)} maxLength={80} placeholder="Enter watermark" />
             <div className="two-options"><div><label htmlFor="wm-size">Text size · {watermarkSize}px</label><input id="wm-size" type="range" min="12" max="100" value={watermarkSize} onChange={(event) => setWatermarkSize(Number(event.target.value))} /></div><div><label htmlFor="wm-opacity">Opacity · {Math.round(opacity * 100)}%</label><input id="wm-opacity" type="range" min="0.05" max="0.8" step="0.05" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} /></div></div>
@@ -286,7 +352,7 @@ export default function Home() {
           </div>}
 
           {error && <div className="error" role="alert">{error}</div>}
-          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>Your PDF is ready</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div> : <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
+          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div> : <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
           <p className="local-note"><ShieldCheck size={14} /> Processed locally in your browser. Your files are never uploaded.</p>
         </div>
       </section>
