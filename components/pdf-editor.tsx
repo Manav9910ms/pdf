@@ -49,6 +49,8 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   const [fontSize, setFontSize] = useState(18);
   const [lineWidth, setLineWidth] = useState(3);
   const [marks, setMarks] = useState<Mark[]>([]);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+  const textDragRef = useRef<{ id: string; start: Point; original: Point } | null>(null);
   const [activePoints, setActivePoints] = useState<Point[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -113,6 +115,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     const point = getPoint(event);
     if (!point) return;
     if (mode === "text") {
+      setSelectedTextId(null);
       if (!text.trim()) { setError("Enter text before placing it on the page."); return; }
       setMarks((current) => [...current, { id: `${Date.now()}-${current.length}`, pageIndex, kind: "text", point, text: text.trim(), color, fontSize }]);
       setError("");
@@ -124,6 +127,12 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   function pointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    if (textDragRef.current) {
+      const drag = textDragRef.current;
+      const point = getPoint(event);
+      if (point) setMarks((current) => current.map((mark) => mark.kind === "text" && mark.id === drag.id ? { ...mark, point: { x: drag.original.x + point.x - drag.start.x, y: drag.original.y + point.y - drag.start.y } } : mark));
+      return;
+    }
     const resize = cropResizeRef.current;
     if (resize) {
       const point = getPoint(event);
@@ -149,6 +158,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   function pointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    if (textDragRef.current) { textDragRef.current = null; return; }
     if (cropResizeRef.current) { cropResizeRef.current = null; return; }
     if (!activePointsRef.current.length || mode === "text") return;
     const point = getPoint(event);
@@ -210,9 +220,9 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
           <button type="button" className={mode === "crop" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("crop")}><Crop size={16} /> Crop</button>
         </div>
         <div className="editor-settings">
-          {mode === "text" && <label className="editor-text-setting"><span>Text</span><input value={text} onChange={(event) => setText(event.target.value)} maxLength={180} /></label>}
-          <label className="editor-color-setting" title="Edit color"><span>Color</span><input aria-label="Edit color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
-          {mode === "text" ? <label className="editor-range-setting"><span>Size {fontSize}</span><input aria-label="Text size" type="range" min="8" max="48" value={fontSize} onChange={(event) => setFontSize(Number(event.target.value))} /></label> : <label className="editor-range-setting"><span>Width {lineWidth}</span><input aria-label="Stroke width" type="range" min="1" max="12" value={lineWidth} onChange={(event) => setLineWidth(Number(event.target.value))} /></label>}
+          {mode === "text" && <label className="editor-text-setting"><span>{selectedTextId ? "Edit selected text" : "Text"}</span><input value={text} onChange={(event) => { const value = event.target.value; setText(value); if (selectedTextId) setMarks((current) => current.map((mark) => mark.kind === "text" && mark.id === selectedTextId ? { ...mark, text: value } : mark)); }} maxLength={180} /></label>}
+          <label className="editor-color-setting" title="Edit color"><span>Color</span><input aria-label="Edit color" type="color" value={color} onChange={(event) => { const value = event.target.value; setColor(value); if (selectedTextId) setMarks((current) => current.map((mark) => mark.kind === "text" && mark.id === selectedTextId ? { ...mark, color: value } : mark)); }} /></label>
+          {mode === "text" ? <label className="editor-range-setting"><span>Size {fontSize}</span><input aria-label="Text size" type="range" min="8" max="96" value={fontSize} onChange={(event) => { const value = Number(event.target.value); setFontSize(value); if (selectedTextId) setMarks((current) => current.map((mark) => mark.kind === "text" && mark.id === selectedTextId ? { ...mark, fontSize: value } : mark)); }} /></label> : <label className="editor-range-setting"><span>Width {lineWidth}</span><input aria-label="Stroke width" type="range" min="1" max="12" value={lineWidth} onChange={(event) => setLineWidth(Number(event.target.value))} /></label>}
         </div>
       </div>
       <div className="editor-hint"><MousePointer2 size={14} /> {activeToolHint} Existing PDF text is not directly editable yet; this tool adds content on top.</div>
@@ -228,7 +238,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
           <canvas ref={canvasRef} className="editor-canvas" />
           {viewport && <svg ref={overlayRef} className="editor-overlay" viewBox={`0 0 ${viewport.width} ${viewport.height}`} preserveAspectRatio="none" onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}>
             {pageMarks.map((mark) => {
-              if (mark.kind === "text") { const [x, y] = viewportPoint(mark.point); return <text key={mark.id} x={x} y={y} fill={mark.color} fontSize={mark.fontSize * 1.15} fontFamily="Arial, sans-serif">{mark.text}</text>; }
+              if (mark.kind === "text") { const [x, y] = viewportPoint(mark.point); return <text key={mark.id} x={x} y={y} fill={mark.color} fontSize={mark.fontSize * 1.15} fontFamily="Arial, sans-serif" style={{ cursor: mode === "text" ? "move" : "default", pointerEvents: mode === "text" ? "all" : "none" }} onPointerDown={(event) => { if (mode !== "text") return; event.stopPropagation(); const start = getPoint(event as unknown as React.PointerEvent<SVGSVGElement>); const svg = overlayRef.current; if (!start || !svg) return; setSelectedTextId(mark.id); setText(mark.text); setColor(mark.color); setFontSize(Math.round(mark.fontSize)); svg.setPointerCapture(event.pointerId); textDragRef.current = { id: mark.id, start, original: mark.point }; }}>{mark.text}</text>; }
               if (mark.kind === "draw") { const points = mark.points.map((point) => viewportPoint(point).join(",")).join(" "); return <polyline key={mark.id} points={points} fill="none" stroke={mark.color} strokeWidth={mark.lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" />; }
               const [x1, y1] = viewportPoint({ x: mark.x, y: mark.y + mark.height });
               const [x2, y2] = viewportPoint({ x: mark.x + mark.width, y: mark.y });
@@ -259,6 +269,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
       </div>
       <div className="editor-footer">
         <span>{marks.length} edit{marks.length === 1 ? "" : "s"} added</span>
+        {selectedTextId && <button type="button" className="editor-clear" disabled={busy} onClick={() => { setMarks((current) => current.filter((mark) => mark.id !== selectedTextId)); setSelectedTextId(null); setText("Your text"); }}>Delete selected text</button>}
         <button type="button" className="editor-clear" disabled={!marks.length || busy} onClick={() => setMarks([])}>Clear edits</button>
         <button type="button" className="primary editor-export" disabled={!marks.length || busy || loading} onClick={exportPdf}>{busy ? "Exporting…" : "Export edited PDF"}</button>
       </div>
