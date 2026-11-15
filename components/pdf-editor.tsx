@@ -112,9 +112,22 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     setLoading(true); setError("");
     (async () => {
       try {
-        const page = await documentProxy.getPage(pageIndex + 1);
-        pageToClean = page;
-        const nextViewport = page.getViewport({ scale: 1.15 });
+        const isAddedPage = pageIndex >= documentProxy.numPages;
+        const sourcePage = await documentProxy.getPage(documentProxy.numPages);
+        pageToClean = sourcePage;
+        const nextViewport = sourcePage.getViewport({ scale: 1.15 });
+        if (isAddedPage) {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          canvas.width = Math.ceil(nextViewport.width); canvas.height = Math.ceil(nextViewport.height);
+          const context = canvas.getContext("2d");
+          if (!context) throw new Error("Your browser could not create a PDF preview.");
+          context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height);
+          if (!cancelled) { viewportRef.current = nextViewport; setViewport(nextViewport); setLoading(false); }
+          return;
+        }
+        const page = pageIndex === documentProxy.numPages - 1 ? sourcePage : await documentProxy.getPage(pageIndex + 1);
+        if (page !== sourcePage) pageToClean = page;
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = Math.ceil(nextViewport.width); canvas.height = Math.ceil(nextViewport.height);
