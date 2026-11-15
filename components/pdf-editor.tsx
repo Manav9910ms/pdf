@@ -26,6 +26,38 @@ type TextMark = { id: string; pageIndex: number; kind: "text"; point: Point; tex
 type DrawMark = { id: string; pageIndex: number; kind: "draw"; points: Point[]; color: string; lineWidth: number };
 type BoxMark = { id: string; pageIndex: number; kind: "highlight" | "rectangle" | "crop"; x: number; y: number; width: number; height: number; color: string; lineWidth: number };
 type Mark = TextMark | DrawMark | BoxMark;
+type PageEntry = { id: string; sourceIndex: number | null };
+
+function EditorThumbnail({ pdf, entry, index, active, onSelect, onDragStart, onDragOver, onDrop }: { pdf: PdfDocument; entry: PageEntry; index: number; active: boolean; onSelect: () => void; onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void; onDragOver: (event: React.DragEvent<HTMLButtonElement>) => void; onDrop: (event: React.DragEvent<HTMLButtonElement>) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    let page: PdfPage | null = null;
+    (async () => {
+      try {
+        page = await pdf.getPage((entry.sourceIndex ?? pdf.numPages - 1) + 1);
+        const viewport = page.getViewport({ scale: 0.19 });
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context) return;
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        if (entry.sourceIndex === null) {
+          context.fillStyle = "#fff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          await page.render({ canvasContext: context, viewport, canvas } as never).promise;
+        }
+      } catch { /* Keep the thumbnail placeholder if rendering fails. */ }
+      finally { page?.cleanup(); }
+    })();
+    return () => { page?.cleanup(); };
+  }, [pdf, entry.sourceIndex]);
+  return <button type="button" draggable className={active ? "editor-thumb active" : "editor-thumb"} aria-label={"Go to page " + (index + 1) + ", drag to reorder"} onClick={onSelect} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop}>
+    <span className="editor-thumb-paper"><canvas ref={canvasRef} /></span>
+    <span className="editor-thumb-number">{index + 1}</span>
+    <span className="editor-thumb-grip" aria-hidden="true">⠿</span>
+  </button>;
+}
 
 function toRgb(hex: string) {
   const value = hex.replace("#", "");
@@ -42,9 +74,9 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   const [documentProxy, setDocumentProxy] = useState<PdfDocument | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageCount, setPageCount] = useState(0);
-  const [insertedPageIndices, setInsertedPageIndices] = useState<number[]>([]);
-  const totalPageCount = pageCount + insertedPageIndices.length;
+  const [pageOrder, setPageOrder] = useState<PageEntry[]>([]);
+  const [draggingPageIndex, setDraggingPageIndex] = useState<number | null>(null);
+  const totalPageCount = pageOrder.length;
   const [mode, setMode] = useState<ToolMode>("text");
   const [text, setText] = useState("Your text");
   const [color, setColor] = useState("#e34242");
@@ -91,7 +123,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   useEffect(() => {
     let cancelled = false;
     let loaded: PdfDocument | null = null;
-    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageCount(0); setInsertedPageIndices([]); marksRef.current = []; undoStackRef.current = []; redoStackRef.current = []; setMarksState([]); setHistoryVersion((value) => value + 1);
+    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageOrder([]); setDraggingPageIndex(null); marksRef.current = []; undoStackRef.current = []; redoStackRef.current = []; setMarksState([]); setHistoryVersion((value) => value + 1);
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -99,7 +131,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
         const pdf = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
         loaded = pdf as unknown as PdfDocument;
         if (cancelled) { await loaded.destroy(); return; }
-        setDocumentProxy(loaded); setPageCount(pdf.numPages); setLoading(false);
+        setDocumentProxy(loaded); setPageOrder(Array.from({ length: pdf.numPages }, (_, index) => ({ id: "source-" + index, sourceIndex: index }))); setLoading(false);
       } catch (cause) {
         if (!cancelled) { setError(cause instanceof Error ? cause.message : "Could not open this PDF."); setLoading(false); }
       }
@@ -114,36 +146,28 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     setLoading(true); setError("");
     (async () => {
       try {
-        const isAddedPage = insertedPageIndices.includes(pageIndex);
-        const originalPageIndex = pageIndex - insertedPageIndices.filter((index) => index < pageIndex).length;
-        const sourcePage = await documentProxy.getPage(documentProxy.numPages);
-        pageToClean = sourcePage;
-        const nextViewport = sourcePage.getViewport({ scale: 1.15 });
-        if (isAddedPage) {
-          const canvas = canvasRef.current;
-          if (!canvas) return;
-          canvas.width = Math.ceil(nextViewport.width); canvas.height = Math.ceil(nextViewport.height);
-          const context = canvas.getContext("2d");
-          if (!context) throw new Error("Your browser could not create a PDF preview.");
-          context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height);
-          if (!cancelled) { viewportRef.current = nextViewport; setViewport(nextViewport); setLoading(false); }
-          return;
-        }
-        const page = originalPageIndex === documentProxy.numPages - 1 ? sourcePage : await documentProxy.getPage(originalPageIndex + 1);
-        if (page !== sourcePage) pageToClean = page;
+        const entry = pageOrder[pageIndex];
+        if (!entry) return;
+        const page = await documentProxy.getPage((entry.sourceIndex ?? documentProxy.numPages - 1) + 1);
+        pageToClean = page;
+        const nextViewport = page.getViewport({ scale: 1.15 });
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = Math.ceil(nextViewport.width); canvas.height = Math.ceil(nextViewport.height);
         const context = canvas.getContext("2d");
         if (!context) throw new Error("Your browser could not create a PDF preview.");
-        await page.render({ canvasContext: context, viewport: nextViewport, canvas } as never).promise;
+        if (entry.sourceIndex === null) {
+          context.fillStyle = "#ffffff"; context.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+          await page.render({ canvasContext: context, viewport: nextViewport, canvas } as never).promise;
+        }
         if (!cancelled) { viewportRef.current = nextViewport; setViewport(nextViewport); setLoading(false); }
       } catch (cause) {
         if (!cancelled) { setError(cause instanceof Error ? cause.message : "Could not render this page."); setLoading(false); }
       } finally { pageToClean?.cleanup(); }
     })();
     return () => { cancelled = true; };
-  }, [documentProxy, pageIndex, insertedPageIndices]);
+  }, [documentProxy, pageIndex, pageOrder]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -240,36 +264,55 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   function viewportPoint(point: Point) { return viewport ? viewport.convertToViewportPoint(point.x, point.y) : [0, 0]; }
 
   async function exportPdf() {
-    if (!marks.length && insertedPageIndices.length === 0) { setError("Add an edit or a new page before exporting."); return; }
+    if (!marks.length && !pageOrder.some((entry) => entry.sourceIndex === null) && pageOrder.every((entry, index) => entry.sourceIndex === index)) { setError("Add an edit or rearrange/insert a page before exporting."); return; }
     setBusy(true); setError("");
     try {
-      const pdf = await PDFDocument.load(await file.arrayBuffer());
-      const font = await pdf.embedFont(StandardFonts.Helvetica);
-      const templateSize = pdf.getPages()[pdf.getPageCount() - 1].getSize();
-      for (const index of [...insertedPageIndices].sort((a, b) => a - b)) pdf.insertPage(index, [templateSize.width, templateSize.height]);
+      const sourcePdf = await PDFDocument.load(await file.arrayBuffer());
+      const orderedPdf = await PDFDocument.create();
+      const templateSize = sourcePdf.getPages()[sourcePdf.getPageCount() - 1].getSize();
+      const sourceIndices = pageOrder.filter((entry) => entry.sourceIndex !== null).map((entry) => entry.sourceIndex as number);
+      const copiedPages = await orderedPdf.copyPages(sourcePdf, sourceIndices);
+      let copiedIndex = 0;
+      for (const entry of pageOrder) {
+        if (entry.sourceIndex === null) orderedPdf.addPage([templateSize.width, templateSize.height]);
+        else orderedPdf.addPage(copiedPages[copiedIndex++]);
+      }
+      const font = await orderedPdf.embedFont(StandardFonts.Helvetica);
       for (const mark of marks) {
-        const page = pdf.getPages()[mark.pageIndex];
+        const page = orderedPdf.getPages()[mark.pageIndex];
         if (!page) continue;
         const paint = toRgb(mark.color);
-        if (mark.kind === "text") {
-          page.drawText(mark.text, { x: mark.point.x, y: mark.point.y, size: mark.fontSize, font, color: paint });
-        } else if (mark.kind === "draw") {
-          for (let index = 1; index < mark.points.length; index++) {
-            page.drawLine({ start: mark.points[index - 1], end: mark.points[index], thickness: mark.lineWidth, color: paint });
-          }
-        } else if (mark.kind === "crop") {
-          page.setCropBox(mark.x, mark.y, mark.width, mark.height);
-        } else {
-          page.drawRectangle({ x: mark.x, y: mark.y, width: mark.width, height: mark.height, color: paint, opacity: mark.kind === "highlight" ? 0.28 : 0.08, borderColor: paint, borderWidth: mark.kind === "rectangle" ? mark.lineWidth : 0, borderOpacity: 1 });
-        }
+        if (mark.kind === "text") page.drawText(mark.text, { x: mark.point.x, y: mark.point.y, size: mark.fontSize, font, color: paint });
+        else if (mark.kind === "draw") {
+          for (let index = 1; index < mark.points.length; index++) page.drawLine({ start: mark.points[index - 1], end: mark.points[index], thickness: mark.lineWidth, color: paint });
+        } else if (mark.kind === "crop") page.setCropBox(mark.x, mark.y, mark.width, mark.height);
+        else page.drawRectangle({ x: mark.x, y: mark.y, width: mark.width, height: mark.height, color: paint, opacity: mark.kind === "highlight" ? 0.28 : 0.08, borderColor: paint, borderWidth: mark.kind === "rectangle" ? mark.lineWidth : 0, borderOpacity: 1 });
       }
-      onExport(await pdf.save());
+      onExport(await orderedPdf.save());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not export the edited PDF.");
     } finally { setBusy(false); }
   }
 
   const pageMarks = marks.filter((mark) => mark.pageIndex === pageIndex);
+
+  function reorderPages(from: number, to: number) {
+    if (from === to || from < 0 || to < 0 || from >= pageOrder.length || to >= pageOrder.length) return;
+    const selectedId = pageOrder[pageIndex]?.id;
+    const nextOrder = [...pageOrder];
+    const [moved] = nextOrder.splice(from, 1);
+    nextOrder.splice(to, 0, moved);
+    const newIndexById = new Map(nextOrder.map((entry, index) => [entry.id, index]));
+    setPageOrder(nextOrder);
+    setPageIndex(newIndexById.get(selectedId ?? "") ?? to);
+    setMarks((current) => current.map((mark) => {
+      const oldPage = pageOrder[mark.pageIndex];
+      const nextIndex = oldPage ? newIndexById.get(oldPage.id) : undefined;
+      return nextIndex === undefined ? mark : { ...mark, pageIndex: nextIndex };
+    }));
+    setDraggingPageIndex(null);
+    setSelectedTextId(null);
+  }
   const activeToolHint = mode === "text" ? "Click the page to place your text." : mode === "draw" ? "Hold and drag to draw." : mode === "highlight" ? "Drag over an area to highlight it." : mode === "crop" ? "Drag to select the area to keep, then drag any of its 8 handles to resize the crop border." : "Drag to add a rectangle.";
 
   return (
@@ -291,6 +334,9 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
         </div>
       </div>
       <div className="editor-hint"><MousePointer2 size={14} /> {activeToolHint} Existing PDF text is not directly editable yet; this tool adds content on top.</div>
+      {documentProxy && pageOrder.length > 0 && <div className="editor-thumbnails" aria-label="PDF page thumbnails">
+        {pageOrder.map((entry, index) => <EditorThumbnail key={entry.id} pdf={documentProxy} entry={entry} index={index} active={index === pageIndex} onSelect={() => { setPageIndex(index); setSelectedTextId(null); }} onDragStart={(event) => { setDraggingPageIndex(index); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", String(index)); }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={(event) => { event.preventDefault(); const from = draggingPageIndex ?? Number(event.dataTransfer.getData("text/plain")); reorderPages(from, index); }} />)}
+      </div>}
       <div className="editor-page-nav">
         <button type="button" className="editor-nav-button" disabled={pageIndex === 0 || loading} onClick={() => setPageIndex((current) => Math.max(0, current - 1))}><ArrowLeft size={15} /> Previous</button>
         <span>Page <strong>{totalPageCount ? pageIndex + 1 : 0}</strong> of {totalPageCount}</span>
@@ -333,11 +379,11 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
         </div>
       </div>
       <div className="editor-footer">
-        <button type="button" className="editor-clear" disabled={loading || busy || !pageCount} onClick={() => { const insertAt = pageIndex + 1; setInsertedPageIndices((current) => [...current.map((index) => index >= insertAt ? index + 1 : index), insertAt].sort((a, b) => a - b)); setPageIndex(insertAt); setSelectedTextId(null); setError(""); }}>+ Insert blank page after current</button>
+        <button type="button" className="editor-clear" disabled={loading || busy || !pageCount} onClick={() => { const insertAt = pageIndex + 1; const next = [...pageOrder]; next.splice(insertAt, 0, { id: "blank-" + Date.now(), sourceIndex: null }); setPageOrder(next); setPageIndex(insertAt); setSelectedTextId(null); setError(""); }}>+ Insert blank page after current</button>
         <span>{marks.length} edit{marks.length === 1 ? "" : "s"} added</span>
         {selectedTextId && <button type="button" className="editor-clear" disabled={busy} onClick={() => { setMarks((current) => current.filter((mark) => mark.id !== selectedTextId)); setSelectedTextId(null); setText("Your text"); }}>Delete selected text</button>}
         <button type="button" className="editor-clear" disabled={!marks.length || busy} onClick={() => setMarks([])}>Clear edits</button>
-        <button type="button" className="primary editor-export" disabled={(!marks.length && insertedPageIndices.length === 0) || busy || loading} onClick={exportPdf}>{busy ? "Exporting…" : "Export edited PDF"}</button>
+        <button type="button" className="primary editor-export" disabled={(!marks.length && !pageOrder.some((entry) => entry.sourceIndex === null) && pageOrder.every((entry, index) => entry.sourceIndex === index)) || busy || loading} onClick={exportPdf}>{busy ? "Exporting…" : "Export edited PDF"}</button>
       </div>
     </section>
   );
