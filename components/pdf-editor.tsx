@@ -38,6 +38,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   const overlayRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<Viewport | null>(null);
   const activePointsRef = useRef<Point[]>([]);
+  const cropResizeRef = useRef<{ id: string; handle: string; start: Point; box: { x: number; y: number; width: number; height: number } } | null>(null);
   const [documentProxy, setDocumentProxy] = useState<PdfDocument | null>(null);
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
@@ -123,6 +124,22 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   function pointerMove(event: React.PointerEvent<SVGSVGElement>) {
+    const resize = cropResizeRef.current;
+    if (resize) {
+      const point = getPoint(event);
+      if (!point) return;
+      const dx = point.x - resize.start.x;
+      const dy = point.y - resize.start.y;
+      const box = resize.box;
+      const minSize = 8;
+      let next = { ...box };
+      if (resize.handle.includes("w")) { const right = box.x + box.width; next.x = Math.min(right - minSize, box.x + dx); next.width = right - next.x; }
+      if (resize.handle.includes("e")) next.width = Math.max(minSize, box.width + dx);
+      if (resize.handle.includes("s")) { const top = box.y + box.height; next.y = Math.min(top - minSize, box.y + dy); next.height = top - next.y; }
+      if (resize.handle.includes("n")) { next.height = Math.max(minSize, box.height - dy); next.y = box.y + box.height - next.height; }
+      setMarks((current) => current.map((mark) => mark.id === resize.id && mark.kind === "crop" ? { ...mark, ...next } : mark));
+      return;
+    }
     if (!activePointsRef.current.length || mode === "text") return;
     const point = getPoint(event);
     if (!point) return;
@@ -132,6 +149,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   function pointerUp(event: React.PointerEvent<SVGSVGElement>) {
+    if (cropResizeRef.current) { cropResizeRef.current = null; return; }
     if (!activePointsRef.current.length || mode === "text") return;
     const point = getPoint(event);
     const points = point ? (mode === "draw" ? [...activePointsRef.current, point] : [activePointsRef.current[0], point]) : activePointsRef.current;
@@ -179,7 +197,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   const pageMarks = marks.filter((mark) => mark.pageIndex === pageIndex);
-  const activeToolHint = mode === "text" ? "Click the page to place your text." : mode === "draw" ? "Hold and drag to draw." : mode === "highlight" ? "Drag over an area to highlight it." : mode === "crop" ? "Drag to select the area to keep. The rest of this page will be cropped on export." : "Drag to add a rectangle.";
+  const activeToolHint = mode === "text" ? "Click the page to place your text." : mode === "draw" ? "Hold and drag to draw." : mode === "highlight" ? "Drag over an area to highlight it." : mode === "crop" ? "Drag to select the area to keep, then drag any of its 8 handles to resize the crop border." : "Drag to add a rectangle.";
 
   return (
     <section className="pdf-editor" aria-label="PDF editor">
@@ -214,7 +232,26 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
               if (mark.kind === "draw") { const points = mark.points.map((point) => viewportPoint(point).join(",")).join(" "); return <polyline key={mark.id} points={points} fill="none" stroke={mark.color} strokeWidth={mark.lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" />; }
               const [x1, y1] = viewportPoint({ x: mark.x, y: mark.y + mark.height });
               const [x2, y2] = viewportPoint({ x: mark.x + mark.width, y: mark.y });
-              return <rect key={mark.id} x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} fill={mark.color} fillOpacity={mark.kind === "highlight" ? 0.28 : 0.08} stroke={mark.kind === "rectangle" || mark.kind === "crop" ? mark.color : "none"} strokeWidth={mark.lineWidth * 1.15} strokeDasharray={mark.kind === "crop" ? "7 4" : undefined} />;
+              const left = Math.min(x1, x2), right = Math.max(x1, x2), top = Math.min(y1, y2), bottom = Math.max(y1, y2);
+              if (mark.kind === "crop") {
+                const handles = [
+                  { id: "nw", x: left, y: top }, { id: "n", x: (left + right) / 2, y: top }, { id: "ne", x: right, y: top },
+                  { id: "e", x: right, y: (top + bottom) / 2 }, { id: "se", x: right, y: bottom }, { id: "s", x: (left + right) / 2, y: bottom },
+                  { id: "sw", x: left, y: bottom }, { id: "w", x: left, y: (top + bottom) / 2 },
+                ];
+                return <g key={mark.id}>
+                  <rect x={left} y={top} width={right - left} height={bottom - top} fill="#635bdb" fillOpacity={0.06} stroke="#635bdb" strokeWidth={1.8} strokeDasharray="7 4" />
+                  {handles.map((handle) => <circle key={handle.id} cx={handle.x} cy={handle.y} r={6} fill="#ffffff" stroke="#635bdb" strokeWidth={2} style={{ cursor: handle.id === "n" || handle.id === "s" ? "ns-resize" : handle.id === "e" || handle.id === "w" ? "ew-resize" : handle.id === "ne" || handle.id === "sw" ? "nesw-resize" : "nwse-resize", touchAction: "none" }} onPointerDown={(event) => {
+                    event.stopPropagation();
+                    const start = getPoint(event as unknown as React.PointerEvent<SVGSVGElement>);
+                    const svg = overlayRef.current;
+                    if (!start || !svg) return;
+                    svg.setPointerCapture(event.pointerId);
+                    cropResizeRef.current = { id: mark.id, handle: handle.id, start, box: { x: mark.x, y: mark.y, width: mark.width, height: mark.height } };
+                  }} />)}
+                </g>;
+              }
+              return <rect key={mark.id} x={left} y={top} width={right - left} height={bottom - top} fill={mark.color} fillOpacity={mark.kind === "highlight" ? 0.28 : 0.08} stroke={mark.kind === "rectangle" ? mark.color : "none"} strokeWidth={mark.lineWidth * 1.15} />;
             })}
             {activePoints && activePoints.length > 0 && (mode === "draw" ? <polyline points={activePoints.map((point) => viewportPoint(point).join(",")).join(" ")} fill="none" stroke={color} strokeWidth={lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" /> : activePoints.length > 1 && <rect x={Math.min(viewportPoint(activePoints[0])[0], viewportPoint(activePoints[1])[0])} y={Math.min(viewportPoint(activePoints[0])[1], viewportPoint(activePoints[1])[1])} width={Math.abs(viewportPoint(activePoints[1])[0] - viewportPoint(activePoints[0])[0])} height={Math.abs(viewportPoint(activePoints[1])[1] - viewportPoint(activePoints[0])[1])} fill={color} fillOpacity={mode === "highlight" ? 0.28 : 0.08} stroke={mode === "rectangle" || mode === "crop" ? (mode === "crop" ? "#635bdb" : color) : "none"} strokeWidth={lineWidth * 1.15} strokeDasharray={mode === "crop" ? "7 4" : undefined} />)}
           </svg>}
