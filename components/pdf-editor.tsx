@@ -137,7 +137,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     const points = point ? (mode === "draw" ? [...activePointsRef.current, point] : [activePointsRef.current[0], point]) : activePointsRef.current;
     if (mode === "draw" && points.length > 1) {
       setMarks((current) => [...current, { id: `${Date.now()}-${current.length}`, pageIndex, kind: "draw", points, color, lineWidth }]);
-    } else if ((mode === "highlight" || mode === "rectangle") && points.length > 1) {
+    } else if ((mode === "highlight" || mode === "rectangle" || mode === "crop") && points.length > 1) {
       const first = points[0], last = points[1];
       const width = Math.abs(last.x - first.x), height = Math.abs(last.y - first.y);
       if (width > 2 && height > 2) {
