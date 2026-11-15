@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
-import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images, Pencil, ScanLine } from "lucide-react";
+import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images, Pencil, ScanLine, Eye } from "lucide-react";
 import JSZip from "jszip";
 import { convertOfficeToPdf } from "@/lib/office-convert";
 import PdfEditor from "@/components/pdf-editor";
 import PdfScanner from "@/components/pdf-scanner";
+import PdfPreview from "@/components/pdf-preview";
 
-type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel" | "edit" | "scan";
+type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel" | "edit" | "scan" | "preview";
 type PickedFile = { file: File; id: string };
 
 const tools = [
@@ -20,6 +21,7 @@ const tools = [
   { id: "watermark" as const, title: "Watermark PDF", detail: "Add text to every page", icon: Stamp },
   { id: "edit" as const, title: "Edit PDF", detail: "Add text, draw, highlight, and shapes", icon: Pencil },
   { id: "scan" as const, title: "Scan to PDF", detail: "Scan paper documents with your camera", icon: ScanLine },
+  { id: "preview" as const, title: "Preview PDF", detail: "View, zoom, and navigate PDF pages", icon: Eye },
   { id: "pdf-images" as const, title: "PDF to Images", detail: "Export pages as PNG or JPG", icon: Images },
   { id: "protect" as const, title: "Protect PDF", detail: "Encrypt with a password", icon: Lock },
   { id: "unlock" as const, title: "Unlock PDF", detail: "Remove a password you know", icon: Unlock },
@@ -70,6 +72,7 @@ export default function Home() {
   const isOfficeTool = tool === "word" || tool === "powerpoint" || tool === "excel";
   const isPdfEditor = tool === "edit";
   const isScanTool = tool === "scan";
+  const isPreviewTool = tool === "preview";
   const currentTool = tools.find((item) => item.id === tool)!;
   const totalSize = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
 
@@ -363,6 +366,7 @@ export default function Home() {
 
           {isPdfEditor && files.length > 0 && <PdfEditor key={files[0].id} file={files[0].file} onExport={(bytes) => saveResult(bytes, "ms-pdf-edited.pdf")} />}
           {isScanTool && <PdfScanner onExport={(bytes) => saveResult(bytes, "ms-pdf-scanned.pdf")} />}
+          {isPreviewTool && files.length > 0 && <PdfPreview key={files[0].id} file={files[0].file} />}
 
           {tool === "split" && files.length > 0 && <div className="options"><label htmlFor="pages">Pages to extract</label><input id="pages" value={pages} onChange={(event) => setPages(event.target.value)} placeholder="e.g. 1, 3-5, 8" /><small>Enter page numbers or ranges, separated by commas.</small></div>}
           {tool === "rotate" && files.length > 0 && <div className="options"><label>Rotate pages</label><div className="angle-options">{[90, 180, 270].map((value) => <button key={value} className={angle === value ? "angle active" : "angle"} onClick={() => setAngle(value)}>{value}°</button>)}</div></div>}
@@ -377,7 +381,7 @@ export default function Home() {
           </div>}
 
           {error && <div className="error" role="alert">{error}</div>}
-          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div>  : !isPdfEditor && !isScanTool && <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
+          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div>  : !isPdfEditor && !isScanTool && !isPreviewTool && <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
           <p className="local-note"><ShieldCheck size={14} /> Processed locally in your browser. Your files are never uploaded.</p>
         </div>
       </section>
