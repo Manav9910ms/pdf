@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { ArrowLeft, ArrowRight, Highlighter, MousePointer2, Pencil, RectangleHorizontal, Type } from "lucide-react";
+import { ArrowLeft, ArrowRight, Highlighter, MousePointer2, Pencil, RectangleHorizontal, Type, Crop } from "lucide-react";
 
 type Point = { x: number; y: number };
 type Viewport = {
@@ -21,10 +21,10 @@ type PdfDocument = {
   getPage: (pageNumber: number) => Promise<PdfPage>;
   destroy: () => Promise<void>;
 };
-type ToolMode = "text" | "draw" | "highlight" | "rectangle";
+type ToolMode = "text" | "draw" | "highlight" | "rectangle" | "crop";
 type TextMark = { id: string; pageIndex: number; kind: "text"; point: Point; text: string; color: string; fontSize: number };
 type DrawMark = { id: string; pageIndex: number; kind: "draw"; points: Point[]; color: string; lineWidth: number };
-type BoxMark = { id: string; pageIndex: number; kind: "highlight" | "rectangle"; x: number; y: number; width: number; height: number; color: string; lineWidth: number };
+type BoxMark = { id: string; pageIndex: number; kind: "highlight" | "rectangle" | "crop"; x: number; y: number; width: number; height: number; color: string; lineWidth: number };
 type Mark = TextMark | DrawMark | BoxMark;
 
 function toRgb(hex: string) {
@@ -140,7 +140,10 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     } else if ((mode === "highlight" || mode === "rectangle") && points.length > 1) {
       const first = points[0], last = points[1];
       const width = Math.abs(last.x - first.x), height = Math.abs(last.y - first.y);
-      if (width > 2 && height > 2) setMarks((current) => [...current, { id: `${Date.now()}-${current.length}`, pageIndex, kind: mode, x: Math.min(first.x, last.x), y: Math.min(first.y, last.y), width, height, color, lineWidth }]);
+      if (width > 2 && height > 2) {
+        const cropMark: BoxMark = { id: `${Date.now()}-${pageIndex}`, pageIndex, kind: mode, x: Math.min(first.x, last.x), y: Math.min(first.y, last.y), width, height, color: mode === "crop" ? "#635bdb" : color, lineWidth };
+        setMarks((current) => mode === "crop" ? [...current.filter((mark) => !(mark.pageIndex === pageIndex && mark.kind === "crop")), cropMark] : [...current, cropMark]);
+      }
     }
     activePointsRef.current = []; setActivePoints(null);
   }
@@ -163,6 +166,8 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
           for (let index = 1; index < mark.points.length; index++) {
             page.drawLine({ start: mark.points[index - 1], end: mark.points[index], thickness: mark.lineWidth, color: paint });
           }
+        } else if (mark.kind === "crop") {
+          page.setCropBox(mark.x, mark.y, mark.width, mark.height);
         } else {
           page.drawRectangle({ x: mark.x, y: mark.y, width: mark.width, height: mark.height, color: paint, opacity: mark.kind === "highlight" ? 0.28 : 0.08, borderColor: paint, borderWidth: mark.kind === "rectangle" ? mark.lineWidth : 0, borderOpacity: 1 });
         }
@@ -174,7 +179,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   }
 
   const pageMarks = marks.filter((mark) => mark.pageIndex === pageIndex);
-  const activeToolHint = mode === "text" ? "Click the page to place your text." : mode === "draw" ? "Hold and drag to draw." : mode === "highlight" ? "Drag over an area to highlight it." : "Drag to add a rectangle.";
+  const activeToolHint = mode === "text" ? "Click the page to place your text." : mode === "draw" ? "Hold and drag to draw." : mode === "highlight" ? "Drag over an area to highlight it." : mode === "crop" ? "Drag to select the area to keep. The rest of this page will be cropped on export." : "Drag to add a rectangle.";
 
   return (
     <section className="pdf-editor" aria-label="PDF editor">
@@ -184,6 +189,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
           <button type="button" className={mode === "draw" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("draw")}><Pencil size={16} /> Draw</button>
           <button type="button" className={mode === "highlight" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("highlight")}><Highlighter size={16} /> Highlight</button>
           <button type="button" className={mode === "rectangle" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("rectangle")}><RectangleHorizontal size={16} /> Rectangle</button>
+          <button type="button" className={mode === "crop" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("crop")}><Crop size={16} /> Crop</button>
         </div>
         <div className="editor-settings">
           {mode === "text" && <label className="editor-text-setting"><span>Text</span><input value={text} onChange={(event) => setText(event.target.value)} maxLength={180} /></label>}
@@ -208,9 +214,9 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
               if (mark.kind === "draw") { const points = mark.points.map((point) => viewportPoint(point).join(",")).join(" "); return <polyline key={mark.id} points={points} fill="none" stroke={mark.color} strokeWidth={mark.lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" />; }
               const [x1, y1] = viewportPoint({ x: mark.x, y: mark.y + mark.height });
               const [x2, y2] = viewportPoint({ x: mark.x + mark.width, y: mark.y });
-              return <rect key={mark.id} x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} fill={mark.color} fillOpacity={mark.kind === "highlight" ? 0.28 : 0.08} stroke={mark.kind === "rectangle" ? mark.color : "none"} strokeWidth={mark.lineWidth * 1.15} />;
+              return <rect key={mark.id} x={Math.min(x1, x2)} y={Math.min(y1, y2)} width={Math.abs(x2 - x1)} height={Math.abs(y2 - y1)} fill={mark.color} fillOpacity={mark.kind === "highlight" ? 0.28 : 0.08} stroke={mark.kind === "rectangle" || mark.kind === "crop" ? mark.color : "none"} strokeWidth={mark.lineWidth * 1.15} strokeDasharray={mark.kind === "crop" ? "7 4" : undefined} />;
             })}
-            {activePoints && activePoints.length > 0 && (mode === "draw" ? <polyline points={activePoints.map((point) => viewportPoint(point).join(",")).join(" ")} fill="none" stroke={color} strokeWidth={lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" /> : activePoints.length > 1 && <rect x={Math.min(viewportPoint(activePoints[0])[0], viewportPoint(activePoints[1])[0])} y={Math.min(viewportPoint(activePoints[0])[1], viewportPoint(activePoints[1])[1])} width={Math.abs(viewportPoint(activePoints[1])[0] - viewportPoint(activePoints[0])[0])} height={Math.abs(viewportPoint(activePoints[1])[1] - viewportPoint(activePoints[0])[1])} fill={color} fillOpacity={mode === "highlight" ? 0.28 : 0.08} stroke={mode === "rectangle" ? color : "none"} strokeWidth={lineWidth * 1.15} />)}
+            {activePoints && activePoints.length > 0 && (mode === "draw" ? <polyline points={activePoints.map((point) => viewportPoint(point).join(",")).join(" ")} fill="none" stroke={color} strokeWidth={lineWidth * 1.15} strokeLinecap="round" strokeLinejoin="round" /> : activePoints.length > 1 && <rect x={Math.min(viewportPoint(activePoints[0])[0], viewportPoint(activePoints[1])[0])} y={Math.min(viewportPoint(activePoints[0])[1], viewportPoint(activePoints[1])[1])} width={Math.abs(viewportPoint(activePoints[1])[0] - viewportPoint(activePoints[0])[0])} height={Math.abs(viewportPoint(activePoints[1])[1] - viewportPoint(activePoints[0])[1])} fill={color} fillOpacity={mode === "highlight" ? 0.28 : 0.08} stroke={mode === "rectangle" || mode === "crop" ? (mode === "crop" ? "#635bdb" : color) : "none"} strokeWidth={lineWidth * 1.15} strokeDasharray={mode === "crop" ? "7 4" : undefined} />)}
           </svg>}
         </div>
       </div>
