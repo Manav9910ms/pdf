@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft, ChevronRight, Download, Eye, Maximize2, Minimize2,
   ZoomIn, ZoomOut, PanelLeft, RotateCw, Search, FileText,
-  X, ChevronDown, Sun, Moon, MoreHorizontal
+  X, ChevronDown, Sun, Moon
 } from "lucide-react";
 
 type Viewport = { width: number; height: number };
@@ -77,7 +77,6 @@ export default function PdfPreview({ file }: { file: File }) {
   const [fullScreen, setFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
-  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -237,7 +236,7 @@ export default function PdfPreview({ file }: { file: File }) {
   }, [pageNumber]);
 
   return (
-    <section className={`pdf-preview ${fullScreen ? "preview-fullscreen" : ""} ${darkMode ? "preview-dark" : ""} ${mobileToolsOpen ? "preview-mobile-tools-open" : ""}`} aria-label="PDF preview">
+    <section className={`pdf-preview ${fullScreen ? "preview-fullscreen" : ""} ${darkMode ? "preview-dark" : ""}`} aria-label="PDF preview">
       <div className="preview-toolbar">
         <div className="preview-toolbar-start">
           <button type="button" className="preview-icon-button" aria-label={showSidebar ? "Hide page thumbnails" : "Show page thumbnails"} title="Page thumbnails" onClick={() => setShowSidebar((v) => !v)}><PanelLeft size={17} /></button>
@@ -259,7 +258,6 @@ export default function PdfPreview({ file }: { file: File }) {
           <button type="button" className="preview-icon-button" aria-label="Rotate page" title="Rotate page" onClick={() => setRotation((v) => (v + 90) % 360)}><RotateCw size={16} /></button>
           <button type="button" className="preview-icon-button" aria-label="Toggle dark mode" title="Toggle dark mode" onClick={() => setDarkMode((v) => !v)}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
           <button type="button" className="preview-icon-button" aria-label={fullScreen ? "Exit full screen" : "Enter full screen"} title={fullScreen ? "Exit full screen" : "Full screen"} onClick={() => setFullScreen((v) => !v)}>{fullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-          <button type="button" className="preview-mobile-more preview-icon-button" aria-label={mobileToolsOpen ? "Hide more tools" : "More PDF tools"} title="More tools" onClick={() => setMobileToolsOpen((v) => !v)}><MoreHorizontal size={17} /></button>
           <a className="preview-download" href={downloadUrl} download={file.name} aria-label="Download original PDF" title="Download original PDF"><Download size={16} /></a>
         </div>
       </div>
