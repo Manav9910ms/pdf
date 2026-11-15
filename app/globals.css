@@ -340,3 +340,8 @@
  .preview-zoom-controls>button[aria-label="Zoom in"],
  .preview-zoom-controls>.preview-fit{display:none!important}
 }
+
+/* Mobile: page navigation is already available in the reader toolbar */
+@media(max-width:760px){
+ .preview-bottom-nav{display:none!important}
+}
