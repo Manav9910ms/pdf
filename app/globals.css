@@ -345,3 +345,22 @@
 @media(max-width:760px){
  .preview-bottom-nav{display:none!important}
 }
+
+/* Restore working page thumbnails in the mobile full-screen reader */
+@media(max-width:760px){
+ .preview-fullscreen .preview-reader-body{flex-direction:column!important}
+ .preview-fullscreen .preview-sidebar{
+   display:flex!important;order:0;flex:none;width:100%;height:112px;
+   min-height:0;border-right:0;border-bottom:1px solid #dfe2e8;
+ }
+ .preview-fullscreen .preview-sidebar-heading{height:25px;flex:none;padding:0 10px}
+ .preview-fullscreen .preview-thumbnails{
+   display:flex;flex-direction:row;align-items:flex-start;gap:8px;
+   padding:6px 9px;overflow-x:auto;overflow-y:hidden;
+   scroll-behavior:smooth;overscroll-behavior-x:contain;
+ }
+ .preview-fullscreen .preview-thumb{width:62px;min-width:62px;flex:none;padding:3px}
+ .preview-fullscreen .preview-thumb-paper{height:65px;min-height:65px}
+ .preview-fullscreen .preview-thumb-paper canvas{max-height:63px;width:auto}
+ .preview-fullscreen .preview-canvas-area{order:1;flex:1;min-height:0;width:100%}
+}
