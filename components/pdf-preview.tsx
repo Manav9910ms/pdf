@@ -25,6 +25,13 @@ export default function PdfPreview({ file }: { file: File }) {
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
   const [fullScreen, setFullScreen] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState("");
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    setDownloadUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +134,7 @@ export default function PdfPreview({ file }: { file: File }) {
           <button type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= MAX_ZOOM && !fitWidth} onClick={() => changeZoom((fitWidth ? 1 : zoom) + ZOOM_STEP)}><ZoomIn size={16} /></button>
           <button type="button" className={fitWidth ? "preview-fit active" : "preview-fit"} onClick={fitToWidth}>Fit width</button>
           <button type="button" aria-label={fullScreen ? "Exit expanded preview" : "Expand preview"} title={fullScreen ? "Exit expanded preview" : "Expand preview"} onClick={() => setFullScreen((current) => !current)}>{fullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-          <a className="preview-download" href={URL.createObjectURL(file)} download={file.name} aria-label="Download original PDF" title="Download original PDF"><Download size={16} /></a>
+          <a className="preview-download" href={downloadUrl} download={file.name} aria-label="Download original PDF" title="Download original PDF"><Download size={16} /></a>
         </div>
       </div>
       <div className="preview-canvas-area" ref={containerRef}>
