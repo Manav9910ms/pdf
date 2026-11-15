@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft, ChevronRight, Download, Eye, Maximize2, Minimize2,
   ZoomIn, ZoomOut, PanelLeft, RotateCw, Search, Printer, FileText,
-  X, ChevronDown, Sun, Moon
+  X, ChevronDown, Sun, Moon, MoreHorizontal
 } from "lucide-react";
 
 type Viewport = { width: number; height: number };
@@ -75,6 +75,8 @@ export default function PdfPreview({ file }: { file: File }) {
   const [error, setError] = useState("");
   const [fullScreen, setFullScreen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -83,6 +85,14 @@ export default function PdfPreview({ file }: { file: File }) {
   const [searchResults, setSearchResults] = useState<number[]>([]);
   const [searchIndex, setSearchIndex] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState("");
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const update = () => { setIsMobile(media.matches); setShowSidebar(!media.matches); };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -146,7 +156,7 @@ export default function PdfPreview({ file }: { file: File }) {
         const viewport = page.getViewport({ scale, rotation });
         const canvas = canvasRef.current;
         if (!canvas) return;
-        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        const outputScale = Math.min(window.devicePixelRatio || 1, isMobile ? 3 : 2.5);
         canvas.width = Math.ceil(viewport.width * outputScale);
         canvas.height = Math.ceil(viewport.height * outputScale);
         canvas.style.width = `${viewport.width}px`;
@@ -165,7 +175,7 @@ export default function PdfPreview({ file }: { file: File }) {
       } finally { pageRef?.cleanup(); }
     })();
     return () => { cancelled = true; task?.cancel(); };
-  }, [pdf, pageNumber, zoom, fitMode, rotation, containerSize]);
+  }, [pdf, pageNumber, zoom, fitMode, rotation, containerSize, isMobile]);
 
   const goToPage = useCallback((value: number) => {
     if (!Number.isFinite(value) || !pageCount) return;
@@ -236,7 +246,7 @@ export default function PdfPreview({ file }: { file: File }) {
   };
 
   return (
-    <section className={`pdf-preview ${fullScreen ? "preview-fullscreen" : ""} ${darkMode ? "preview-dark" : ""}`} aria-label="PDF preview">
+    <section className={`pdf-preview ${fullScreen ? "preview-fullscreen" : ""} ${darkMode ? "preview-dark" : ""} ${mobileToolsOpen ? "preview-mobile-tools-open" : ""}`} aria-label="PDF preview">
       <div className="preview-toolbar">
         <div className="preview-toolbar-start">
           <button type="button" className="preview-icon-button" aria-label={showSidebar ? "Hide page thumbnails" : "Show page thumbnails"} title="Page thumbnails" onClick={() => setShowSidebar((v) => !v)}><PanelLeft size={17} /></button>
@@ -249,6 +259,7 @@ export default function PdfPreview({ file }: { file: File }) {
           <button type="button" aria-label="Next page" disabled={!pageCount || pageNumber >= pageCount} onClick={() => goToPage(pageNumber + 1)}><ChevronRight size={17} /></button>
         </div>
         <div className="preview-zoom-controls">
+          <button type="button" className="preview-mobile-search preview-icon-button" aria-label="Search PDF" title="Search PDF" onClick={() => setSearchOpen((v) => !v)}><Search size={16} /></button>
           <button type="button" aria-label="Zoom out" title="Zoom out" disabled={zoom <= MIN_ZOOM && fitMode === "none"} onClick={() => changeZoom((fitMode === "none" ? zoom : 1) - ZOOM_STEP)}><ZoomOut size={16} /></button>
           <span>{fitMode === "width" ? "Fit width" : fitMode === "page" ? "Fit page" : `${Math.round(zoom * 100)}%`}</span>
           <button type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= MAX_ZOOM && fitMode === "none"} onClick={() => changeZoom((fitMode === "none" ? zoom : 1) + ZOOM_STEP)}><ZoomIn size={16} /></button>
@@ -258,6 +269,7 @@ export default function PdfPreview({ file }: { file: File }) {
           <button type="button" className="preview-icon-button" aria-label="Toggle dark mode" title="Toggle dark mode" onClick={() => setDarkMode((v) => !v)}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
           <button type="button" className="preview-icon-button" aria-label="Print PDF" title="Print PDF" onClick={printDocument}><Printer size={16} /></button>
           <button type="button" className="preview-icon-button" aria-label={fullScreen ? "Exit full screen" : "Enter full screen"} title={fullScreen ? "Exit full screen" : "Full screen"} onClick={() => setFullScreen((v) => !v)}>{fullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+          <button type="button" className="preview-mobile-more preview-icon-button" aria-label={mobileToolsOpen ? "Hide more tools" : "More PDF tools"} title="More tools" onClick={() => setMobileToolsOpen((v) => !v)}><MoreHorizontal size={17} /></button>
           <a className="preview-download" href={downloadUrl} download={file.name} aria-label="Download original PDF" title="Download original PDF"><Download size={16} /></a>
         </div>
       </div>
