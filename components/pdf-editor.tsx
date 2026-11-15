@@ -379,7 +379,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
         </div>
       </div>
       <div className="editor-footer">
-        <button type="button" className="editor-clear" disabled={loading || busy || !pageCount} onClick={() => { const insertAt = pageIndex + 1; const next = [...pageOrder]; next.splice(insertAt, 0, { id: "blank-" + Date.now(), sourceIndex: null }); setPageOrder(next); setPageIndex(insertAt); setSelectedTextId(null); setError(""); }}>+ Insert blank page after current</button>
+        <button type="button" className="editor-clear" disabled={loading || busy || !totalPageCount} onClick={() => { const insertAt = pageIndex + 1; const next = [...pageOrder]; next.splice(insertAt, 0, { id: "blank-" + Date.now(), sourceIndex: null }); setPageOrder(next); setPageIndex(insertAt); setSelectedTextId(null); setError(""); }}>+ Insert blank page after current</button>
         <span>{marks.length} edit{marks.length === 1 ? "" : "s"} added</span>
         {selectedTextId && <button type="button" className="editor-clear" disabled={busy} onClick={() => { setMarks((current) => current.filter((mark) => mark.id !== selectedTextId)); setSelectedTextId(null); setText("Your text"); }}>Delete selected text</button>}
         <button type="button" className="editor-clear" disabled={!marks.length || busy} onClick={() => setMarks([])}>Clear edits</button>
