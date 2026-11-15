@@ -43,8 +43,8 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   const [viewport, setViewport] = useState<Viewport | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCount, setPageCount] = useState(0);
-  const [addedPageCount, setAddedPageCount] = useState(0);
-  const totalPageCount = pageCount + addedPageCount;
+  const [insertedPageIndices, setInsertedPageIndices] = useState<number[]>([]);
+  const totalPageCount = pageCount + insertedPageIndices.length;
   const [mode, setMode] = useState<ToolMode>("text");
   const [text, setText] = useState("Your text");
   const [color, setColor] = useState("#e34242");
@@ -91,7 +91,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   useEffect(() => {
     let cancelled = false;
     let loaded: PdfDocument | null = null;
-    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageCount(0); setAddedPageCount(0); marksRef.current = []; undoStackRef.current = []; redoStackRef.current = []; setMarksState([]); setHistoryVersion((value) => value + 1);
+    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageCount(0); setInsertedPageIndices([]); marksRef.current = []; undoStackRef.current = []; redoStackRef.current = []; setMarksState([]); setHistoryVersion((value) => value + 1);
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -114,7 +114,8 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     setLoading(true); setError("");
     (async () => {
       try {
-        const isAddedPage = pageIndex >= documentProxy.numPages;
+        const isAddedPage = insertedPageIndices.includes(pageIndex);
+        const originalPageIndex = pageIndex - insertedPageIndices.filter((index) => index < pageIndex).length;
         const sourcePage = await documentProxy.getPage(documentProxy.numPages);
         pageToClean = sourcePage;
         const nextViewport = sourcePage.getViewport({ scale: 1.15 });
@@ -128,7 +129,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
           if (!cancelled) { viewportRef.current = nextViewport; setViewport(nextViewport); setLoading(false); }
           return;
         }
-        const page = pageIndex === documentProxy.numPages - 1 ? sourcePage : await documentProxy.getPage(pageIndex + 1);
+        const page = originalPageIndex === documentProxy.numPages - 1 ? sourcePage : await documentProxy.getPage(originalPageIndex + 1);
         if (page !== sourcePage) pageToClean = page;
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -142,7 +143,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
       } finally { pageToClean?.cleanup(); }
     })();
     return () => { cancelled = true; };
-  }, [documentProxy, pageIndex]);
+  }, [documentProxy, pageIndex, insertedPageIndices]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -239,13 +240,13 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   function viewportPoint(point: Point) { return viewport ? viewport.convertToViewportPoint(point.x, point.y) : [0, 0]; }
 
   async function exportPdf() {
-    if (!marks.length && addedPageCount === 0) { setError("Add an edit or a new page before exporting."); return; }
+    if (!marks.length && insertedPageIndices.length === 0) { setError("Add an edit or a new page before exporting."); return; }
     setBusy(true); setError("");
     try {
       const pdf = await PDFDocument.load(await file.arrayBuffer());
       const font = await pdf.embedFont(StandardFonts.Helvetica);
       const templateSize = pdf.getPages()[pdf.getPageCount() - 1].getSize();
-      for (let index = 0; index < addedPageCount; index++) pdf.addPage([templateSize.width, templateSize.height]);
+      for (const index of [...insertedPageIndices].sort((a, b) => a - b)) pdf.insertPage(index, [templateSize.width, templateSize.height]);
       for (const mark of marks) {
         const page = pdf.getPages()[mark.pageIndex];
         if (!page) continue;
@@ -332,11 +333,11 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
         </div>
       </div>
       <div className="editor-footer">
-        <button type="button" className="editor-clear" disabled={loading || busy || !pageCount} onClick={() => { setAddedPageCount((count) => count + 1); setPageIndex(pageCount + addedPageCount); setSelectedTextId(null); setError(""); }}>+ Add new page</button>
+        <button type="button" className="editor-clear" disabled={loading || busy || !pageCount} onClick={() => { const insertAt = pageIndex + 1; setInsertedPageIndices((current) => [...current.map((index) => index >= insertAt ? index + 1 : index), insertAt].sort((a, b) => a - b)); setPageIndex(insertAt); setSelectedTextId(null); setError(""); }}>+ Insert blank page after current</button>
         <span>{marks.length} edit{marks.length === 1 ? "" : "s"} added</span>
         {selectedTextId && <button type="button" className="editor-clear" disabled={busy} onClick={() => { setMarks((current) => current.filter((mark) => mark.id !== selectedTextId)); setSelectedTextId(null); setText("Your text"); }}>Delete selected text</button>}
         <button type="button" className="editor-clear" disabled={!marks.length || busy} onClick={() => setMarks([])}>Clear edits</button>
-        <button type="button" className="primary editor-export" disabled={(!marks.length && addedPageCount === 0) || busy || loading} onClick={exportPdf}>{busy ? "Exporting…" : "Export edited PDF"}</button>
+        <button type="button" className="primary editor-export" disabled={(!marks.length && insertedPageIndices.length === 0) || busy || loading} onClick={exportPdf}>{busy ? "Exporting…" : "Export edited PDF"}</button>
       </div>
     </section>
   );
