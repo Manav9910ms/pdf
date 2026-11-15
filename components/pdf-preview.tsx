@@ -88,7 +88,7 @@ export default function PdfPreview({ file }: { file: File }) {
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 760px)");
-    const update = () => { setIsMobile(media.matches); setShowSidebar(!media.matches); };
+    const update = () => { setIsMobile(media.matches); setShowSidebar(!media.matches); setFullScreen(media.matches); };
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
@@ -147,7 +147,7 @@ export default function PdfPreview({ file }: { file: File }) {
         const page = await pdf.getPage(pageNumber);
         pageRef = page;
         const base = page.getViewport({ scale: 1, rotation });
-        const availableWidth = Math.max(160, containerSize.width - 56);
+        const availableWidth = Math.max(160, containerSize.width - (isMobile ? 16 : 56));
         const availableHeight = Math.max(180, containerSize.height - 44);
         const widthScale = availableWidth / base.width;
         const pageScale = Math.min(widthScale, availableHeight / base.height);
