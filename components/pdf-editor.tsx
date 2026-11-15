@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { ArrowLeft, ArrowRight, Highlighter, MousePointer2, Pencil, RectangleHorizontal, Type, Crop } from "lucide-react";
+import { ArrowLeft, ArrowRight, Highlighter, MousePointer2, Pencil, RectangleHorizontal, Type, Crop, Undo2, Redo2 } from "lucide-react";
 
 type Point = { x: number; y: number };
 type Viewport = {
@@ -48,7 +48,37 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   const [color, setColor] = useState("#e34242");
   const [fontSize, setFontSize] = useState(18);
   const [lineWidth, setLineWidth] = useState(3);
-  const [marks, setMarks] = useState<Mark[]>([]);
+  const [marks, setMarksState] = useState<Mark[]>([]);
+  const marksRef = useRef<Mark[]>([]);
+  const undoStackRef = useRef<Mark[][]>([]);
+  const redoStackRef = useRef<Mark[][]>([]);
+  const [, setHistoryVersion] = useState(0);
+  const setMarks = (update: Mark[] | ((current: Mark[]) => Mark[])) => {
+    const previous = marksRef.current;
+    const next = typeof update === "function" ? update(previous) : update;
+    if (next === previous) return;
+    undoStackRef.current = [...undoStackRef.current.slice(-99), previous];
+    redoStackRef.current = [];
+    marksRef.current = next;
+    setMarksState(next);
+    setHistoryVersion((value) => value + 1);
+  };
+  const undo = () => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) return;
+    redoStackRef.current.push(marksRef.current);
+    marksRef.current = previous;
+    setMarksState(previous);
+    setHistoryVersion((value) => value + 1);
+  };
+  const redo = () => {
+    const next = redoStackRef.current.pop();
+    if (!next) return;
+    undoStackRef.current.push(marksRef.current);
+    marksRef.current = next;
+    setMarksState(next);
+    setHistoryVersion((value) => value + 1);
+  };
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const textDragRef = useRef<{ id: string; start: Point; original: Point } | null>(null);
   const [activePoints, setActivePoints] = useState<Point[] | null>(null);
@@ -59,7 +89,7 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
   useEffect(() => {
     let cancelled = false;
     let loaded: PdfDocument | null = null;
-    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageCount(0); setMarks([]);
+    setLoading(true); setError(""); setDocumentProxy(null); setViewport(null); setPageIndex(0); setPageCount(0); marksRef.current = []; undoStackRef.current = []; redoStackRef.current = []; setMarksState([]); setHistoryVersion((value) => value + 1);
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
@@ -98,6 +128,21 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     })();
     return () => { cancelled = true; };
   }, [documentProxy, pageIndex]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) redo(); else undo();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault(); redo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
 
   function getPoint(event: React.PointerEvent<SVGSVGElement>): Point | null {
     const activeViewport = viewportRef.current;
@@ -213,6 +258,8 @@ export default function PdfEditor({ file, onExport }: { file: File; onExport: (b
     <section className="pdf-editor" aria-label="PDF editor">
       <div className="editor-toolbar">
         <div className="editor-tool-group">
+          <button type="button" className="editor-tool" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={undoStackRef.current.length === 0} onClick={undo}><Undo2 size={16} /> Undo</button>
+          <button type="button" className="editor-tool" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={redoStackRef.current.length === 0} onClick={redo}><Redo2 size={16} /> Redo</button>
           <button type="button" className={mode === "text" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("text")}><Type size={16} /> Text</button>
           <button type="button" className={mode === "draw" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("draw")}><Pencil size={16} /> Draw</button>
           <button type="button" className={mode === "highlight" ? "editor-tool active" : "editor-tool"} onClick={() => setMode("highlight")}><Highlighter size={16} /> Highlight</button>
