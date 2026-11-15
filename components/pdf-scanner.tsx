@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { PDFDocument } from "pdf-lib";
-import { Camera, CameraOff, FileImage, ImagePlus, RotateCcw, ScanLine, Trash2, Upload } from "lucide-react";
+import { Camera, CameraOff, FileImage, ImagePlus, ArrowDown, ArrowUp, ScanLine, Trash2, Upload } from "lucide-react";
 
 type ScanPage = { id: string; blob: Blob; previewUrl: string };
 type ScanFilter = "color" | "grayscale" | "blackwhite";
@@ -183,12 +183,12 @@ export default function PdfScanner({ onExport }: { onExport: (bytes: Uint8Array)
         </div>
       </div>
 
-      <div className="scanner-pages-heading"><strong>Scanned pages <span>{pages.length}</span></strong><small>Drag order with the arrows · Remove unwanted pages</small></div>
+      <div className="scanner-pages-heading"><strong>Scanned pages <span>{pages.length}</span></strong><small>Use arrows to reorder pages · Remove unwanted pages</small></div>
       {pages.length ? <div className="scanner-page-grid">{pages.map((page, index) => <article className="scanner-page-card" key={page.id}>
         <div className="scanner-page-preview"><img src={page.previewUrl} alt={`Scanned page ${index + 1}`} style={{ filter: filterCss(filter) }} /><span>Page {index + 1}</span></div>
         <div className="scanner-page-actions">
-          <button type="button" aria-label={`Move page ${index + 1} up`} disabled={index === 0} onClick={() => movePage(index, -1)}><RotateCcw size={14} /> Up</button>
-          <button type="button" aria-label={`Move page ${index + 1} down`} disabled={index === pages.length - 1} onClick={() => movePage(index, 1)}>Down</button>
+          <button type="button" aria-label={`Move page ${index + 1} up`} disabled={index === 0} onClick={() => movePage(index, -1)}><ArrowUp size={14} /> Up</button>
+          <button type="button" aria-label={`Move page ${index + 1} down`} disabled={index === pages.length - 1} onClick={() => movePage(index, 1)}><ArrowDown size={14} /> Down</button>
           <button type="button" aria-label={`Remove page ${index + 1}`} onClick={() => removePage(page.id)}><Trash2 size={14} /></button>
         </div>
       </article>)}</div> : <div className="scanner-empty"><FileImage size={24} /><strong>No pages scanned yet</strong><span>Capture pages with your camera or upload images to begin.</span></div>}
