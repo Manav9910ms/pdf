@@ -306,5 +306,3 @@ export default function PdfPreview({ file }: { file: File }) {
     </section>
   );
 }
-
-[executed on device: manavcloud (44c48b67-2e33-42fa-8fd3-0f4290fb75d3)]
