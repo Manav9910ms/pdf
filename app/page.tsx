@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
-import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images, Pencil } from "lucide-react";
+import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images, Pencil, ScanLine } from "lucide-react";
 import JSZip from "jszip";
 import { convertOfficeToPdf } from "@/lib/office-convert";
 import PdfEditor from "@/components/pdf-editor";
+import PdfScanner from "@/components/pdf-scanner";
 
-type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel" | "edit";
+type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel" | "edit" | "scan";
 type PickedFile = { file: File; id: string };
 
 const tools = [
@@ -18,6 +19,7 @@ const tools = [
   { id: "compress" as const, title: "Compress PDF", detail: "Reduce PDF file size", icon: FileArchive },
   { id: "watermark" as const, title: "Watermark PDF", detail: "Add text to every page", icon: Stamp },
   { id: "edit" as const, title: "Edit PDF", detail: "Add text, draw, highlight, and shapes", icon: Pencil },
+  { id: "scan" as const, title: "Scan to PDF", detail: "Scan paper documents with your camera", icon: ScanLine },
   { id: "pdf-images" as const, title: "PDF to Images", detail: "Export pages as PNG or JPG", icon: Images },
   { id: "protect" as const, title: "Protect PDF", detail: "Encrypt with a password", icon: Lock },
   { id: "unlock" as const, title: "Unlock PDF", detail: "Remove a password you know", icon: Unlock },
@@ -67,6 +69,7 @@ export default function Home() {
   const isPdfToImages = tool === "pdf-images";
   const isOfficeTool = tool === "word" || tool === "powerpoint" || tool === "excel";
   const isPdfEditor = tool === "edit";
+  const isScanTool = tool === "scan";
   const currentTool = tools.find((item) => item.id === tool)!;
   const totalSize = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
 
@@ -339,12 +342,12 @@ export default function Home() {
             <div><h2>{currentTool.title}</h2><p>{currentTool.detail}</p></div>
           </div>
 
-          <label className="dropzone">
+          {!isScanTool && <label className="dropzone">
             <input type="file" accept={isImageTool ? "image/*" : tool === "word" ? ".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" : tool === "powerpoint" ? ".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" : tool === "excel" ? ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf,.pdf"} multiple={acceptsMultiple} onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = ""; }} />
             <span className="upload-icon"><Upload size={22} /></span>
             <strong>{files.length ? "Add more files" : isImageTool ? "Choose images" : isOfficeTool ? "Choose " + (tool === "word" ? "Word (.docx)" : tool === "powerpoint" ? "PowerPoint (.pptx)" : "Excel (.xlsx)") + " file" : "Choose PDF files"}</strong>
             <span>or drop them here · {isImageTool ? "Images supported by your browser" : isOfficeTool ? "Office file · processed locally" : "PDF only"}</span>
-          </label>
+          </label>}
 
           {isOfficeTool && <p className="local-note">Office files are rendered into PDF pages. Some advanced fonts, charts, or layouts may look different from Microsoft Office, and page text may not be selectable.</p>}
 
@@ -359,6 +362,7 @@ export default function Home() {
           </div>}
 
           {isPdfEditor && files.length > 0 && <PdfEditor key={files[0].id} file={files[0].file} onExport={(bytes) => saveResult(bytes, "ms-pdf-edited.pdf")} />}
+          {isScanTool && <PdfScanner onExport={(bytes) => saveResult(bytes, "ms-pdf-scanned.pdf")} />}
 
           {tool === "split" && files.length > 0 && <div className="options"><label htmlFor="pages">Pages to extract</label><input id="pages" value={pages} onChange={(event) => setPages(event.target.value)} placeholder="e.g. 1, 3-5, 8" /><small>Enter page numbers or ranges, separated by commas.</small></div>}
           {tool === "rotate" && files.length > 0 && <div className="options"><label>Rotate pages</label><div className="angle-options">{[90, 180, 270].map((value) => <button key={value} className={angle === value ? "angle active" : "angle"} onClick={() => setAngle(value)}>{value}°</button>)}</div></div>}
@@ -373,7 +377,7 @@ export default function Home() {
           </div>}
 
           {error && <div className="error" role="alert">{error}</div>}
-          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div> : !isPdfEditor && <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
+          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div>  : !isPdfEditor && !isScanTool && <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
           <p className="local-note"><ShieldCheck size={14} /> Processed locally in your browser. Your files are never uploaded.</p>
         </div>
       </section>
