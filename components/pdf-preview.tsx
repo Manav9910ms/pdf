@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronLeft, ChevronRight, Download, Eye, Maximize2, Minimize2,
-  ZoomIn, ZoomOut, PanelLeft, RotateCw, Search, Printer, FileText,
+  ZoomIn, ZoomOut, PanelLeft, RotateCw, Search, FileText,
   X, ChevronDown, Sun, Moon, MoreHorizontal
 } from "lucide-react";
 
@@ -31,6 +31,7 @@ function PdfThumbnail({ pdf, pageNumber, active, onClick }: {
   pdf: PdfDocument; pageNumber: number; active: boolean; onClick: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const touchStartX = useRef<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     let task: RenderTask | null = null;
@@ -235,16 +236,6 @@ export default function PdfPreview({ file }: { file: File }) {
     active?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [pageNumber]);
 
-  const printDocument = () => {
-    if (!downloadUrl) return;
-    const frame = document.createElement("iframe");
-    frame.style.position = "fixed"; frame.style.width = "1px"; frame.style.height = "1px";
-    frame.style.opacity = "0"; frame.src = downloadUrl;
-    frame.onload = () => { frame.contentWindow?.focus(); frame.contentWindow?.print(); };
-    document.body.appendChild(frame);
-    window.setTimeout(() => frame.remove(), 60000);
-  };
-
   return (
     <section className={`pdf-preview ${fullScreen ? "preview-fullscreen" : ""} ${darkMode ? "preview-dark" : ""} ${mobileToolsOpen ? "preview-mobile-tools-open" : ""}`} aria-label="PDF preview">
       <div className="preview-toolbar">
@@ -267,7 +258,6 @@ export default function PdfPreview({ file }: { file: File }) {
           <button type="button" className={fitMode === "page" ? "preview-fit active" : "preview-fit"} onClick={() => setFitMode("page")}>Fit page</button>
           <button type="button" className="preview-icon-button" aria-label="Rotate page" title="Rotate page" onClick={() => setRotation((v) => (v + 90) % 360)}><RotateCw size={16} /></button>
           <button type="button" className="preview-icon-button" aria-label="Toggle dark mode" title="Toggle dark mode" onClick={() => setDarkMode((v) => !v)}>{darkMode ? <Sun size={16} /> : <Moon size={16} />}</button>
-          <button type="button" className="preview-icon-button" aria-label="Print PDF" title="Print PDF" onClick={printDocument}><Printer size={16} /></button>
           <button type="button" className="preview-icon-button" aria-label={fullScreen ? "Exit full screen" : "Enter full screen"} title={fullScreen ? "Exit full screen" : "Full screen"} onClick={() => setFullScreen((v) => !v)}>{fullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
           <button type="button" className="preview-mobile-more preview-icon-button" aria-label={mobileToolsOpen ? "Hide more tools" : "More PDF tools"} title="More tools" onClick={() => setMobileToolsOpen((v) => !v)}><MoreHorizontal size={17} /></button>
           <a className="preview-download" href={downloadUrl} download={file.name} aria-label="Download original PDF" title="Download original PDF"><Download size={16} /></a>
@@ -296,7 +286,17 @@ export default function PdfPreview({ file }: { file: File }) {
             </div>
           </aside>
         )}
-        <div className="preview-canvas-area" ref={containerRef}>
+        <div
+          className="preview-canvas-area"
+          ref={containerRef}
+          onTouchStart={(event) => { if (fullScreen) touchStartX.current = event.touches[0]?.clientX ?? null; }}
+          onTouchEnd={(event) => {
+            if (!fullScreen || touchStartX.current === null) return;
+            const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+            touchStartX.current = null;
+            if (Math.abs(delta) > 55) goToPage(pageNumber + (delta < 0 ? 1 : -1));
+          }}
+        >
           {loading && <div className="preview-loading"><span className="preview-spinner" /> Opening PDF…</div>}
           {!loading && rendering && <div className="preview-loading preview-loading-small">Rendering page…</div>}
           {error && <div className="error preview-error" role="alert">{error}</div>}
