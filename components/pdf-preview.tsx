@@ -31,7 +31,6 @@ function PdfThumbnail({ pdf, pageNumber, active, onClick }: {
   pdf: PdfDocument; pageNumber: number; active: boolean; onClick: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const touchStartX = useRef<number | null>(null);
   useEffect(() => {
     let cancelled = false;
     let task: RenderTask | null = null;
@@ -63,6 +62,7 @@ function PdfThumbnail({ pdf, pageNumber, active, onClick }: {
 
 export default function PdfPreview({ file }: { file: File }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const touchStartX = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const thumbListRef = useRef<HTMLDivElement>(null);
   const [pdf, setPdf] = useState<PdfDocument | null>(null);
