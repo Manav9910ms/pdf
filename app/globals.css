@@ -333,3 +333,10 @@
  .preview-fullscreen .preview-zoom-controls>button[aria-label="Zoom in"],
  .preview-fullscreen .preview-zoom-controls .preview-fit{display:none!important}
 }
+
+/* Hide manual zoom and fit controls on mobile in both inline and fullscreen layouts */
+@media(max-width:760px){
+ .preview-zoom-controls>button[aria-label="Zoom out"],
+ .preview-zoom-controls>button[aria-label="Zoom in"],
+ .preview-zoom-controls>.preview-fit{display:none!important}
+}
