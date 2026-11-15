@@ -229,3 +229,49 @@
  .preview-reader-body{height:65vh}
  .preview-status{font-size:9px}
 }
+
+
+/* Mobile-first PDF reading refinements */
+.preview-mobile-search,.preview-mobile-more{display:none}
+@media(max-width:760px){
+ .pdf-preview{margin-top:14px;padding-top:10px}
+ .preview-toolbar{display:grid;grid-template-columns:1fr auto;gap:9px;padding:9px;border-radius:12px 12px 0 0}
+ .preview-toolbar-start{width:auto;min-width:0}
+ .preview-document-label{font-size:13px}
+ .preview-page-controls{grid-column:2;grid-row:1;gap:5px}
+ .preview-page-controls button{width:34px;height:36px}
+ .preview-page-controls input{width:45px;height:36px;font-size:13px}
+ .preview-page-controls span{font-size:12px}
+ .preview-zoom-controls{grid-column:1 / -1;width:100%;display:flex;flex-wrap:nowrap;gap:6px;overflow:visible}
+ .preview-zoom-controls>button{height:38px;min-width:38px}
+ .preview-zoom-controls>span{display:none}
+ .preview-zoom-controls .preview-fit,.preview-zoom-controls>button[aria-label="Rotate page"],.preview-zoom-controls>button[aria-label="Toggle dark mode"],.preview-zoom-controls>button[aria-label="Print PDF"],.preview-zoom-controls>button[aria-label="Enter full screen"],.preview-zoom-controls>button[aria-label="Exit full screen"]{display:none}
+ .preview-mobile-search,.preview-mobile-more{display:inline-flex;flex:none}
+ .preview-zoom-controls .preview-download{width:38px;height:38px;flex:none;margin-left:auto}
+ .preview-mobile-tools-open .preview-zoom-controls .preview-fit,.preview-mobile-tools-open .preview-zoom-controls>button[aria-label="Rotate page"],.preview-mobile-tools-open .preview-zoom-controls>button[aria-label="Toggle dark mode"],.preview-mobile-tools-open .preview-zoom-controls>button[aria-label="Print PDF"],.preview-mobile-tools-open .preview-zoom-controls>button[aria-label="Enter full screen"],.preview-mobile-tools-open .preview-zoom-controls>button[aria-label="Exit full screen"]{display:inline-flex}
+ .preview-mobile-tools-open .preview-zoom-controls .preview-fit{width:auto;padding:0 9px}
+ .preview-reader-body{height:68vh;min-height:420px;flex-direction:column}
+ .preview-sidebar{width:100%;height:122px;flex:none;border-right:0;border-bottom:1px solid #e0e3e9}
+ .preview-sidebar-heading{height:27px;padding:0 10px}
+ .preview-thumbnails{padding:7px 9px;flex-direction:row;align-items:flex-start;overflow-x:auto;overflow-y:hidden}
+ .preview-thumb{width:70px;min-width:70px;padding:3px}
+ .preview-thumb-paper{height:70px;min-height:70px}
+ .preview-thumb-paper canvas{max-height:68px;width:auto}
+ .preview-canvas-area{padding:12px 8px 54px;align-items:flex-start}
+ .preview-paper{max-width:100%;overflow:visible}
+ .preview-paper canvas{max-width:none}
+ .preview-bottom-nav{position:sticky;bottom:5px;left:auto;transform:none;margin:10px auto 0}
+ .preview-status{padding:5px 2px;min-height:30px}
+ .preview-shortcuts{display:none}
+}
+@media(max-width:430px){
+ .preview-reader-body{height:calc(100dvh - 365px);min-height:360px}
+ .preview-toolbar{gap:8px;padding:8px}
+ .preview-zoom-controls{gap:5px}
+ .preview-zoom-controls>button{min-width:36px;height:36px}
+ .preview-zoom-controls .preview-download{width:36px;height:36px}
+ .preview-sidebar{height:112px}
+ .preview-thumb{width:64px;min-width:64px}
+ .preview-thumb-paper{height:64px;min-height:64px}
+ .preview-canvas-area{padding-left:4px;padding-right:4px}
+}
