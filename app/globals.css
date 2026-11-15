@@ -364,3 +364,11 @@
  .preview-fullscreen .preview-thumb-paper canvas{max-height:63px;width:auto}
  .preview-fullscreen .preview-canvas-area{order:1;flex:1;min-height:0;width:100%}
 }
+
+/* Mobile: keep zoom and fit controls visible; the toolbar is now compact enough */
+@media(max-width:760px){
+ .preview-zoom-controls>button[aria-label="Zoom out"],
+ .preview-zoom-controls>button[aria-label="Zoom in"],
+ .preview-zoom-controls>.preview-fit{display:inline-flex!important}
+ .preview-zoom-controls>.preview-fit{width:auto;min-width:54px;padding:0 8px;white-space:nowrap}
+}
