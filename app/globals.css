@@ -379,3 +379,16 @@
  .preview-zoom-controls>button[aria-label="Zoom in"],
  .preview-zoom-controls>.preview-fit{display:none!important}
 }
+
+/* Mobile toolbar: show all reader controls directly; no overflow menu */
+@media(max-width:760px){
+ .preview-zoom-controls>button[aria-label="Zoom out"],
+ .preview-zoom-controls>button[aria-label="Zoom in"],
+ .preview-zoom-controls>.preview-fit,
+ .preview-zoom-controls>button[aria-label="Rotate page"],
+ .preview-zoom-controls>button[aria-label="Toggle dark mode"],
+ .preview-zoom-controls>button[aria-label="Enter full screen"],
+ .preview-zoom-controls>button[aria-label="Exit full screen"]{display:inline-flex!important}
+ .preview-zoom-controls>.preview-fit{width:auto;min-width:54px;padding:0 7px;white-space:nowrap}
+ .preview-mobile-more{display:none!important}
+}
