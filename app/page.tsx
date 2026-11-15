@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
-import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images } from "lucide-react";
+import { Files, Scissors, RotateCw, ShieldCheck, Upload, X, ArrowDownToLine, FileText, Check, Image as ImageIcon, FileArchive, Stamp, Lock, Unlock, Images, Pencil } from "lucide-react";
 import JSZip from "jszip";
 import { convertOfficeToPdf } from "@/lib/office-convert";
+import PdfEditor from "@/components/pdf-editor";
 
-type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel";
+type Tool = "merge" | "split" | "rotate" | "images" | "compress" | "watermark" | "pdf-images" | "protect" | "unlock" | "word" | "powerpoint" | "excel" | "edit";
 type PickedFile = { file: File; id: string };
 
 const tools = [
@@ -16,6 +17,7 @@ const tools = [
   { id: "images" as const, title: "Images to PDF", detail: "Turn images into a PDF", icon: ImageIcon },
   { id: "compress" as const, title: "Compress PDF", detail: "Reduce PDF file size", icon: FileArchive },
   { id: "watermark" as const, title: "Watermark PDF", detail: "Add text to every page", icon: Stamp },
+  { id: "edit" as const, title: "Edit PDF", detail: "Add text, draw, highlight, and shapes", icon: Pencil },
   { id: "pdf-images" as const, title: "PDF to Images", detail: "Export pages as PNG or JPG", icon: Images },
   { id: "protect" as const, title: "Protect PDF", detail: "Encrypt with a password", icon: Lock },
   { id: "unlock" as const, title: "Unlock PDF", detail: "Remove a password you know", icon: Unlock },
@@ -64,6 +66,7 @@ export default function Home() {
   const isImageTool = tool === "images";
   const isPdfToImages = tool === "pdf-images";
   const isOfficeTool = tool === "word" || tool === "powerpoint" || tool === "excel";
+  const isPdfEditor = tool === "edit";
   const currentTool = tools.find((item) => item.id === tool)!;
   const totalSize = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
 
@@ -355,6 +358,8 @@ export default function Home() {
             </div>)}
           </div>}
 
+          {isPdfEditor && files.length > 0 && <PdfEditor key={files[0].id} file={files[0].file} onExport={(bytes) => saveResult(bytes, "ms-pdf-edited.pdf")} />}
+
           {tool === "split" && files.length > 0 && <div className="options"><label htmlFor="pages">Pages to extract</label><input id="pages" value={pages} onChange={(event) => setPages(event.target.value)} placeholder="e.g. 1, 3-5, 8" /><small>Enter page numbers or ranges, separated by commas.</small></div>}
           {tool === "rotate" && files.length > 0 && <div className="options"><label>Rotate pages</label><div className="angle-options">{[90, 180, 270].map((value) => <button key={value} className={angle === value ? "angle active" : "angle"} onClick={() => setAngle(value)}>{value}°</button>)}</div></div>}
           {tool === "compress" && files.length > 0 && <div className="options"><label htmlFor="quality">Compression level</label><select id="quality" value={quality} onChange={(event) => setQuality(event.target.value)}><option value="high">High quality · larger file</option><option value="medium">Balanced · recommended</option><option value="strong">Smaller file · lower quality</option></select><small>Pages are converted to images. Text won't remain selectable or searchable.</small></div>}
@@ -368,7 +373,7 @@ export default function Home() {
           </div>}
 
           {error && <div className="error" role="alert">{error}</div>}
-          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div> : <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
+          {downloadUrl ? <div className="success"><div className="success-mark"><Check size={18} /></div><div className="success-copy"><strong>{tool === "pdf-images" ? "Your images are ready" : "Your PDF is ready"}</strong><span>{downloadName} · {formatSize(resultSize)}</span></div><a className="download" href={downloadUrl} download={downloadName}><ArrowDownToLine size={17} /> Download</a></div> : !isPdfEditor && <button className="primary" disabled={!files.length || busy} onClick={processFiles}>{busy ? "Working..." : <>{actionLabel} <ArrowDownToLine size={17} /></>}</button>}
           <p className="local-note"><ShieldCheck size={14} /> Processed locally in your browser. Your files are never uploaded.</p>
         </div>
       </section>
