@@ -326,3 +326,10 @@
  .pdf-preview.preview-fullscreen .preview-zoom-controls .preview-download{width:35px;height:35px}
  .pdf-preview.preview-fullscreen .preview-canvas-area{padding:8px 2px 12px}
 }
+
+/* Keep mobile PDF toolbar focused on essential actions */
+@media(max-width:760px){
+ .preview-fullscreen .preview-zoom-controls>button[aria-label="Zoom out"],
+ .preview-fullscreen .preview-zoom-controls>button[aria-label="Zoom in"],
+ .preview-fullscreen .preview-zoom-controls .preview-fit{display:none!important}
+}
